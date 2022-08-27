@@ -38,3 +38,7 @@ tests/paillier_*
 # Debug files
 *.dSYM/
 *.class
+
+# Main file
+main
+outputs 
