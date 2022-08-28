@@ -41,4 +41,6 @@ tests/paillier_*
 
 # Main file
 main
-outputs 
+main_1
+outputs
+outputs_1 
