@@ -9,6 +9,8 @@
 #include "util/cuda_wrap.h"
 #include "fixnum_array.h"
 
+using namespace std;
+
 namespace cuFIXNUM {
 
 // TODO: The only device function in this file is the dispatch kernel
@@ -45,10 +47,14 @@ namespace {
 template< typename fixnum >
 fixnum_array<fixnum> *
 fixnum_array<fixnum>::create(size_t nelts) {
+    // Create a new fixnum_array (array that can interface with the cuda-fixnum instruction set)
     fixnum_array *a = new fixnum_array;
+    // set nelts parameter to nelts (size 1024)
     a->nelts = nelts;
     if (nelts > 0) {
+        // size of nbytes = nelts (1024 bytes) x size / element (128 bytes)
         size_t nbytes = nelts * fixnum::BYTES;
+        // allocating device memory of size nbytes pointed to by 'a'
         cuda_malloc_managed(&a->ptr, nbytes);
     }
     return a;
@@ -79,6 +85,7 @@ fixnum_array<fixnum>::create(const byte *data, size_t total_bytes, size_t bytes_
         return nullptr;
 
     size_t nelts = ceilquo(total_bytes, bytes_per_elt);
+    // cout << "nelts is: " << nelts << endl;
     fixnum_array *a = create(nelts);
 
     byte *p = as_byte_ptr(a->ptr);
@@ -291,6 +298,7 @@ fixnum_array<fixnum>::map(Args... args) {
 //         cuda_stream_attach_mem(stream, ptr);
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
+        // std::cout << "call to GPU!" << std::endl; 
         dispatch<Func, fixnum ><<< nblocks, BLOCK_SIZE, 0, stream >>>(nelts, args->ptr...);
 
         cuda_check(cudaPeekAtLastError(), "kernel invocation/run");

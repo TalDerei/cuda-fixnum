@@ -12,15 +12,21 @@
 #include "modnum/modnum_monty_redc.cu"
 #include "modnum/modnum_monty_cios.cu"
 
+using namespace std;
+using namespace cuFIXNUM;
+
 const unsigned int bytes_per_elem = 128;
 const unsigned int io_bytes_per_elem = 96;
+
+__constant__
+const uint8_t non_residue_bytes[bytes_per_elem] = {13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+__constant__
+const uint8_t mnt4_modulus_bytes[bytes_per_elem] = {1,128,94,36,222,99,144,94,159,17,221,44,82,84,157,227,240,37,196,154,113,16,136,99,164,84,114,118,233,204,90,104,56,126,83,203,165,13,15,184,157,5,24,242,118,231,23,177,157,247,90,161,217,36,209,153,141,237,160,232,37,185,253,7,115,216,151,108,249,232,183,94,237,175,143,91,80,151,249,183,173,205,226,238,34,144,34,16,17,196,146,45,198,196,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 // GPU modulus
 // Declares device variable in constant memory, accessible from all threads, with lifetime of application
 // __constant__ uint8_t gpu_modulus[bytes_per_elem];
-
-using namespace std;
-using namespace cuFIXNUM;
 
 // GpuFq class 
 template <typename fixnum>
@@ -133,14 +139,20 @@ struct mul_and_convert {
   typedef GpuFq<fixnum> GpuFq;
   typedef GpuFq2<fixnum> GpuFq2;
 
-  __device__ void operator()(fixnum &r0,fixnum &r1, fixnum a0, fixnum a1, fixnum b0, fixnum b1, fixnum m, fixnum n) {
-    // 
+  __device__ void operator()(fixnum &r0,fixnum &r1, fixnum a0, fixnum a1, fixnum b0, fixnum b1) {
+    fixnum n = array_to_fixnum(non_residue_bytes);
+    fixnum m = array_to_fixnum(mnt4_modulus_bytes);
+
     modnum mod = modnum(m);
     GpuFq non_residue = GpuFq::load(n, mod);
     GpuFq2 fqA = GpuFq2(GpuFq::load(a0, mod), GpuFq::load(a1, mod), non_residue);
     GpuFq2 fqB = GpuFq2(GpuFq::load(b0, mod), GpuFq::load(b1, mod), non_residue);
     GpuFq2 fqS = fqA * fqB;
     fqS.save(r0, r1);
+  }
+
+  __device__ fixnum array_to_fixnum(const uint8_t* arr) {
+    return fixnum(((fixnum*)arr)[fixnum::layout::laneIdx()]);
   }
 };
 
@@ -187,13 +199,14 @@ uint8_t* get_fixnum_array(fixnum_array* res0, fixnum_array* res1, int nelts) {
 
 
 template< int fn_bytes, typename word_fixnum, template <typename> class Func >
-uint8_t* compute_product(uint8_t* a, uint8_t* b, int nelts, uint8_t* input_m_base) {
+uint8_t* compute_product(uint8_t* a, uint8_t* b, int nelts) {
     // Interface with the fixnum instruction set (precision modular arithmetic library that targets CUDA)
     // So we're defining a special array 'fixnum_array' that can use the instruction set on CUDA
     typedef warp_fixnum<fn_bytes, word_fixnum> fixnum;
     typedef fixnum_array<fixnum> fixnum_array;
 
-    // Allocate memory to uint8_t arrays of size 128 x 1024 bytes each 
+    // Allocate memory to uint8_t arrays of size 128 x 1024 bytes each
+    cout << "fn_bytes * nelts is: " << fn_bytes * nelts << endl;
     uint8_t *input_a0 = new uint8_t[fn_bytes * nelts];
     uint8_t *input_a1 = new uint8_t[fn_bytes * nelts];
 
@@ -211,42 +224,26 @@ uint8_t* compute_product(uint8_t* a, uint8_t* b, int nelts, uint8_t* input_m_bas
       mempcpy(input_b1 + i * fn_bytes, b + 2 * i * fn_bytes + fn_bytes, fn_bytes);
     }
 
-     // TODO: try to use constant memory
-    uint8_t *input_m = new uint8_t[fn_bytes * nelts];
-
-    for (int i = 0; i < fn_bytes * nelts; ++i) {
-      input_m[i] = input_m_base[i%fn_bytes];
-    }
-
     // for (int i = 0; i < fn_bytes * nelts; ++i) {
     //   cout << unsigned(input_m[i]) << endl;
     // }
 
-    uint8_t input_n_base[fn_bytes] = {0};
-    input_n_base[0] = 13;
-
-    uint8_t *input_n = new uint8_t[fn_bytes * nelts];
-    for (int i = 0; i < fn_bytes * nelts; ++i) {
-      input_n[i] = input_n_base[i%fn_bytes];
-    }
-
-    fixnum_array *res0, *res1, *in_a0, *in_a1, *in_b0, *in_b1, *in_m, *in_n;
+    fixnum_array *res0, *res1, *in_a0, *in_a1, *in_b0, *in_b1;
 
     // Converting uint8_t * array into fixnum_array
+    // Create takes a pointer to the data, total bytes (fn_bytes * nelts), and bytes / element (fn_bytes)
     in_a0 = fixnum_array::create(input_a0, fn_bytes * nelts, fn_bytes);
     in_a1 = fixnum_array::create(input_a1, fn_bytes * nelts, fn_bytes);
 
     in_b0 = fixnum_array::create(input_b0, fn_bytes * nelts, fn_bytes);
     in_b1 = fixnum_array::create(input_b1, fn_bytes * nelts, fn_bytes);
 
-    in_m = fixnum_array::create(input_m, fn_bytes * nelts, fn_bytes);
-    in_n = fixnum_array::create(input_n, fn_bytes * nelts, fn_bytes);
-
     res0 = fixnum_array::create(nelts);
     res1 = fixnum_array::create(nelts);
 
     // Calling 'mul_and_convert' struct that contains GPU functions to be performed on these arrays
-    fixnum_array::template map<Func>(res0, res1, in_a0, in_a1, in_b0, in_b1, in_m, in_n);
+    // This calls functions in fixnum_array.cu which allocate memory and synchronize memory between host and device
+    fixnum_array::template map<Func>(res0, res1, in_a0, in_a1, in_b0, in_b1);
 
     uint8_t* v_res = get_fixnum_array<fn_bytes, fixnum_array>(res0, res1, nelts);
 
@@ -254,14 +251,12 @@ uint8_t* compute_product(uint8_t* a, uint8_t* b, int nelts, uint8_t* input_m_bas
     delete in_a1;
     delete in_b0;
     delete in_b1;
-    delete in_m;
     delete res0;
     delete res1;
     delete[] input_a0;
     delete[] input_a1;
     delete[] input_b0;
     delete[] input_b1;
-    delete[] input_m;
     return v_res;
     
     // Copies data to the given symbol on the device 
@@ -299,10 +294,13 @@ void print_array(uint8_t* a) {
 }
 
 int main(int argc, char* argv[]) {
+  // cudaEvent_t start, stop;
+  // cudaEventCreate(&start);
+  // cudaEventCreate(&stop);
+  // cudaEventRecord(start);
+
   setbuf(stdout, NULL);
 
-  // mnt4_q
-  uint8_t mnt4_modulus[bytes_per_elem] = {1,128,94,36,222,99,144,94,159,17,221,44,82,84,157,227,240,37,196,154,113,16,136,99,164,84,114,118,233,204,90,104,56,126,83,203,165,13,15,184,157,5,24,242,118,231,23,177,157,247,90,161,217,36,209,153,141,237,160,232,37,185,253,7,115,216,151,108,249,232,183,94,237,175,143,91,80,151,249,183,173,205,226,238,34,144,34,16,17,196,146,45,198,196,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
   auto inputs = fopen(argv[2], "r"); 
   auto outputs = fopen(argv[3], "w");
 
@@ -333,7 +331,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Perform the multiplication
-    uint8_t* res_x = compute_product<bytes_per_elem, u64_fixnum, mul_and_convert>(x0, x1, n, mnt4_modulus);
+    uint8_t* res_x = compute_product<bytes_per_elem, u64_fixnum, mul_and_convert>(x0, x1, n);
 
     for (size_t i = 0; i < n; ++i) {
       write_mnt_fq2(res_x + (2 * i * bytes_per_elem), outputs);
@@ -342,6 +340,12 @@ int main(int argc, char* argv[]) {
     delete[] x0;
     delete[] x1;
     delete[] res_x;
+
+    // cudaEventRecord(stop);
+    // cudaEventSynchronize(stop);
+    // float milliseconds = 0;
+    // cudaEventElapsedTime(&milliseconds, start, stop); 
+    // cout << "time is: " << milliseconds << "ms" << endl;
   }
 
   return 0;
