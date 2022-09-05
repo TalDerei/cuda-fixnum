@@ -43,4 +43,6 @@ tests/paillier_*
 main
 main_1
 outputs
-outputs_1 
+outputs_1
+main_2
+outputs_2 
