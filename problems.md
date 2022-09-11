@@ -18,4 +18,14 @@ Phase 1 (Quadratic Extension Field):
      Currently the c++ code is much faster (10 ms vs 100 ms) in execution time. Not even sure if I'm benchamrking properly between c++ and cuda code.
 
 Phase 2 (Cubic Extension Field):
-     
+
+Phase 3 (Curve Operations):
+
+     Need to figure out why stage 3 is throwing errors when trying to initialize the parameters (e.g. init_params_mnt4/init_params_mnt6). Can't continue without figuring out this issue
+          - For now, I had to change the field modulus to something simple because it was complaning about mnt4_modulus and mnt4_modulus parameters for some reason...will need to figure that out later but at least it compiles for now. 
+
+     Should dive deeper into the gpu_constants.cuh file and differentiate between warp_fixnum, fixnum_array, and modnum_monty_redc. 
+          - read the readme files for high level descriptions, can dive deeper if needed
+
+     Need to learn how to read device objects/elements from GPU and print them back out on the host
+

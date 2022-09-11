@@ -261,6 +261,7 @@ uint8_t* compute_product(uint8_t* a, uint8_t* b, int nelts) {
     // Calling 'mul_and_convert' struct that contains GPU functions to be performed on these arrays
     // This calls functions in fixnum_array.cu which allocate memory and synchronize memory between host and device
     fixnum_array::template map<Func>(res0, res1, res2, in_a0, in_a1, in_a2, in_b0, in_b1, in_b2);
+    exit(0);
 
     uint8_t* v_res = get_fixnum_array<fn_bytes, fixnum_array>(res0, res1, res2, nelts);
 

@@ -274,6 +274,7 @@ template< typename fixnum >
 template< template <typename> class Func, typename... Args >
 void
 fixnum_array<fixnum>::map(Args... args) {
+    cout << "Entered fixnum_array" << endl;
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
 
